@@ -141,3 +141,23 @@ export class NotImplementedError implements AppError {
         this.name = "NotImplementedError";
     }
 }
+
+/**
+ * Represents an error for resource locked functionality.
+ * This error is used to indicate that a certain resource is
+ * currently under a lock
+ *
+ * @class ResourceLockedError
+ * @implements {AppError}
+ */
+
+export class ResourceLockedError implements AppError {
+    statusCode: number;
+    message: string;
+    name: string;
+    constructor(message: string) {
+        this.statusCode = 423;
+        this.message = message;
+        this.name = "ResourceLockedError"
+    }
+}
