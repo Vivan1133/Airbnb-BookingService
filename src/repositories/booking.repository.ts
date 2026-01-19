@@ -1,10 +1,18 @@
-import { Prisma } from "../../generated/prisma/browser";
-import {  IdempotencyKey, PrismaClient } from "../../generated/prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { NotFoundError } from "../utils/errors/app.error";
+import { IdempotencyKey } from "../generated/browser";
 
 const prisma = new PrismaClient();
 
-export async function createBookingRepository(bookingData: Prisma.BookingCreateInput) {
+export async function createBookingRepository(bookingData: {
+    userId: number;
+    hotelId: number;
+    checkInDate: string;
+    checkOutDate: string;
+    roomCategoryId: number;
+    bookingAmt: number;
+    totalGuest: number;
+}) {
     const booking = await prisma.booking.create({
         data: bookingData
     })

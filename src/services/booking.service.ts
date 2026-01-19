@@ -2,19 +2,42 @@ import { CreateBookingDTO } from "../dtos/booking.dto";
 import { confirmBooking, createBookingRepository, createIdempotencyKeyRepo, finalizeIdempotencyKey, getIdempotencyKeyWithLock } from "../repositories/booking.repository";
 import { BadRequestError, NotFoundError } from "../utils/errors/app.error";
 import generateIdemKey from "../utils/generateIdempotentKey";
-import { PrismaClient } from "../../generated/prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { validate as validateIdempotencyKeyFormat } from "uuid";
 import { serverConfig } from "../config";
 import { redLock } from "../config/redisConfig";
 import { ResourceLockedError } from "../utils/errors/app.error";
+import { getAvailableRooms, updateBookingIdToRooms } from "../api/hotel.api";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+    url: process.env.DATABASE_URL
+});
+
+type AvailableRoom = {
+    id: number;
+    roomCategoryId: number;
+    dateOfAvailability: Date;
+}
 
 export async function createBookingService(createBookingData : CreateBookingDTO) {
 
     const ttl = serverConfig.REDIS_TTL;
     const bookingResource = `lock:hoteId-${createBookingData.hotelId}`;
 
+    const availableRooms = await getAvailableRooms(
+        createBookingData.roomCategoryId,
+        createBookingData.checkInDate,
+        createBookingData.checkOutDate
+    );
+
+    const checkOutDate = new Date(createBookingData.checkOutDate);
+    const checkInDate = new Date(createBookingData.checkInDate);
+
+    const totalNights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 3600 * 24));
+
+    if(availableRooms.length === 0 || availableRooms.length < totalNights) {
+        throw new BadRequestError("No rooms available for the selected category and dates");
+    }
 
     let lock;
 
@@ -27,12 +50,17 @@ export async function createBookingService(createBookingData : CreateBookingDTO)
             userId : createBookingData.userId,
             hotelId: createBookingData.hotelId,
             bookingAmt: createBookingData.bookingAmt,
-            totalGuest: createBookingData.totalGuest
+            totalGuest: createBookingData.totalGuest,
+            checkInDate: new Date(createBookingData.checkInDate).toISOString(),
+            checkOutDate: new Date(createBookingData.checkOutDate).toISOString(),
+            roomCategoryId: createBookingData.roomCategoryId
         });
 
         const idemKey = generateIdemKey();
 
         await createIdempotencyKeyRepo(idemKey, booking.id);
+
+        await updateBookingIdToRooms(booking.id, availableRooms.data.map((room : AvailableRoom) => room.id));
 
         return {
             bookingId: booking.id,
@@ -69,7 +97,7 @@ export async function createBookingService(createBookingData : CreateBookingDTO)
 
 export async function confirmBookingService(idempotencyKey: string) {
 
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx : Prisma.TransactionClient) => {
 
         if(!validateIdempotencyKeyFormat(idempotencyKey)) {
             throw new BadRequestError("Invalid idempotency key format")
