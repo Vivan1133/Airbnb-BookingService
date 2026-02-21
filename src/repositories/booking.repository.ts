@@ -1,8 +1,15 @@
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "../generated/client";
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { NotFoundError } from "../utils/errors/app.error";
-import { IdempotencyKey } from "../generated/browser";
 
-const prisma = new PrismaClient();
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+    throw new Error("DATABASE_URL is required to initialize Prisma client");
+}
+
+const adapter = new PrismaMariaDb(databaseUrl);
+const prisma = new PrismaClient({ adapter });
 
 export async function createBookingRepository(bookingData: {
     userId: number;
@@ -36,16 +43,7 @@ export async function createIdempotencyKeyRepo(key: string, bookingId: number) {
 }
 
 export async function getIdempotencyKeyWithLock(key: string, tx: Prisma.TransactionClient) {
-    // const idempotencyKey = await prisma.idempotencyKey.findUnique({
-    //     where: {
-    //         idemKey: key
-    //     }
-    // })
-    // return idempotencyKey;
-
-
-
-    const idempotencyKey: Array<IdempotencyKey> = await tx.$queryRaw`
+    const idempotencyKey: Array<Prisma.IdempotencyKeyGetPayload<{}>> = await tx.$queryRaw`
         SELECT * FROM idempotencyKey where idemKey=${key} FOR UPDATE
     `
 

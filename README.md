@@ -46,12 +46,51 @@ It prevents double bookings using idempotency keys and Redis Redlock, and commun
 
 ## 📖 Booking Routes
 
-Base Path: ```/booking```
+Base Path: `/api/v1/booking`
 
-| Method | Endpoint                            | Description                 |
-| ------ | ----------------------------------- | --------------------------- |
-| `POST` | `/booking`                          | Create booking (idempotent) |
-| `POST` | `/booking/confirm/{idempotencyKey}` | Confirm booking             |
+| Method  | Endpoint                   | Description                  |
+| ------- | -------------------------- | ---------------------------- |
+| `POST`  | `/`                        | Create booking (idempotent)  |
+| `POST`  | `/confirm/:idempotencyKey` | Confirm booking              |
+| `GET`   | `/:bookingId`              | Get booking details by ID    |
+| `PATCH` | `/:bookingId/cancel`       | Cancel booking by booking ID |
+
+## Request Payloads
+
+### 1. Create Booking
+
+- Endpoint: `POST /api/v1/booking/`
+- Body:
+
+```json
+{
+  "userId": 1,
+  "hotelId": 1,
+  "bookingAmt": 4500,
+  "totalGuest": 2,
+  "checkInDate": "2026-02-25",
+  "checkOutDate": "2026-02-27",
+  "roomCategoryId": 2
+}
+```
+
+### 2. Confirm Booking
+
+- Endpoint: `POST /api/v1/booking/confirm/:idempotencyKey`
+- Request body: No request body required
+- Path param: `idempotencyKey` (UUID returned from create booking API)
+
+### 3. Get Booking By ID
+
+- Endpoint: `GET /api/v1/booking/:bookingId`
+- Request body: No request body required
+- Path param: `bookingId` (positive integer)
+
+### 4. Cancel Booking
+
+- Endpoint: `PATCH /api/v1/booking/:bookingId/cancel`
+- Request body: No request body required
+- Path param: `bookingId` (positive integer)
 
 
 ### 🔐 Idempotency Handling

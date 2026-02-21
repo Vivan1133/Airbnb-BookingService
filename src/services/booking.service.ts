@@ -1,17 +1,23 @@
 import { CreateBookingDTO } from "../dtos/booking.dto";
-import { confirmBooking, createBookingRepository, createIdempotencyKeyRepo, finalizeIdempotencyKey, getIdempotencyKeyWithLock } from "../repositories/booking.repository";
+import { cancellBooking, confirmBooking, createBookingRepository, createIdempotencyKeyRepo, finalizeIdempotencyKey, getBookingById, getIdempotencyKeyWithLock } from "../repositories/booking.repository";
 import { BadRequestError, NotFoundError } from "../utils/errors/app.error";
 import generateIdemKey from "../utils/generateIdempotentKey";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient, Prisma } from "../generated/client";
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { validate as validateIdempotencyKeyFormat } from "uuid";
 import { serverConfig } from "../config";
 import { redLock } from "../config/redisConfig";
 import { ResourceLockedError } from "../utils/errors/app.error";
 import { getAvailableRooms, updateBookingIdToRooms } from "../api/hotel.api";
 
-const prisma = new PrismaClient({
-    url: process.env.DATABASE_URL
-});
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+    throw new Error("DATABASE_URL is required to initialize Prisma client");
+}
+
+const adapter = new PrismaMariaDb(databaseUrl);
+const prisma = new PrismaClient({ adapter });
 
 type AvailableRoom = {
     id: number;
@@ -70,27 +76,6 @@ export async function createBookingService(createBookingData : CreateBookingDTO)
     } catch (error) {
         throw new ResourceLockedError("The resource/hotel is under a lock");
     }
-
-
-
-    // return await redLock.using([bookingResource], ttl, async () => {
-    //     const booking = await createBookingRepository({
-    //         userId : createBookingData.userId,
-    //         hotelId: createBookingData.hotelId,
-    //         bookingAmt: createBookingData.bookingAmt,
-    //         totalGuest: createBookingData.totalGuest
-    //     });
-
-    //     const idemKey = generateIdemKey();
-
-    //     await createIdempotencyKeyRepo(idemKey, booking.id);
-
-    //     return {
-    //         bookingId: booking.id,
-    //         idempotencyKey: idemKey
-    //     }
-    // });
-
 }
 
 // potential issue in the confirmBookingService
@@ -120,4 +105,28 @@ export async function confirmBookingService(idempotencyKey: string) {
     })
 
     
+}
+
+export async function getBookingByIdService(bookingId: number) {
+    const booking = await getBookingById(bookingId);
+
+    if (!booking) {
+        throw new NotFoundError("Booking not found");
+    }
+
+    return booking;
+}
+
+export async function cancelBookingService(bookingId: number) {
+    const booking = await getBookingById(bookingId);
+
+    if (!booking) {
+        throw new NotFoundError("Booking not found");
+    }
+
+    if (booking.status === "CANCELLED") {
+        throw new BadRequestError("Booking is already cancelled");
+    }
+
+    return await cancellBooking(bookingId);
 }
